@@ -5,24 +5,220 @@ const express = require("express"),
   fs = require("fs"),
   throttle = require("express-throttle-bandwidth"),
   XLSX = require("xlsx");
+var admin = require("firebase-admin");
+admin.initializeApp();
+
+const currYear = new Date().getFullYear().toString().substring(2, 4);
+
+function getSetting(businessId) {
+  return new Promise((resolve, reject) => {
+    admin
+      .app()
+      .firestore()
+      .collectionGroup("settings")
+      .where("businessId", "==", businessId)
+      .get()
+      .then((res) => {
+        res.docs.forEach((doc) => {
+          resolve(doc.data());
+        });
+      })
+      .catch((e) => {
+        reject(e);
+      });
+  });
+}
+
+function disqualifyTransaction(businessId, trans) {
+  return new Promise((resolve, reject) => {
+    const transRef = admin
+      .app()
+      .firestore()
+      .doc(`businesses/${businessId}/transactions/${trans.id}`);
+    transRef
+      .update({ ...trans, status: "not-eligible" })
+      .then((res) => {
+        resolve();
+      })
+      .catch((e) => {
+        reject(e);
+      });
+  });
+}
+
+function calculateReward(transTime, transAmt, setting) {
+  const timePart = parseInt(transTime.match(/(\d{2})(?=\:)/)[0]);
+  let rewardAmt;
+  //If transTime is morning
+  if (timePart <= 12) {
+    //Apply setting morning %
+    rewardAmt = parseInt(
+      parseInt(transAmt) * parseFloat(setting.percent.morning / 100)
+    );
+  } else if (timePart <= 18) {
+    //If transTime is afternoon
+    //Apply setting afternoon %
+    rewardAmt = parseInt(
+      parseInt(transAmt) * parseFloat(setting.percent.afternoon / 100)
+    );
+  } else {
+    //If transTime is night
+    //Apply setting night %
+    rewardAmt = parseInt(
+      parseInt(transAmt) * parseFloat(setting.percent.night / 100)
+    );
+  }
+
+  return rewardAmt;
+}
+
+async function commissionTransaction(businessId, trans, setting) {
+  return new Promise((resolve, reject) => {
+    admin
+      .app()
+      .firestore()
+      .runTransaction(async (transaction) => {
+        const businessRef = admin
+          .app()
+          .firestore()
+          .doc(`businesses/${businessId}`);
+        const transRef = admin
+          .app()
+          .firestore()
+          .doc(`businesses/${businessId}/transactions/${trans.id}`);
+        const businessesDoc = await transaction.get(businessRef);
+        const transDoc = await transaction.get(transRef);
+        console.log("businessesDoc.data()", businessesDoc.data());
+        console.log("transDoc.data()", transDoc.data());
+        if (businessesDoc.exists) {
+          const business = businessesDoc.data();
+          //7% of amount is collected to bank
+          const commissionAmt = parseInt(parseInt(trans.amount) * 0.07);
+          if (business.bank) {
+            console.log("here");
+            console.log("bank", business.bank);
+            console.log("commissionAmt", commissionAmt);
+            transaction.update(businessRef, {
+              bank: business.bank + commissionAmt,
+            });
+          } else {
+            console.log("here");
+            console.log("commissionAmt", commissionAmt);
+            transaction.update(businessRef, { bank: commissionAmt });
+          }
+        }
+        if (transDoc.exists) {
+          const rewardAmt = calculateReward(trans.time, trans.amount, setting);
+          trans["rewardAmt"] = rewardAmt;
+          transaction.update(transRef, {
+            ...trans,
+            status: "commissioned",
+          });
+        }
+        resolve();
+      });
+  });
+}
+
+function getRegisteredTransactions(businessId) {
+  const transactions = [];
+  return new Promise((resolve, reject) => {
+    admin
+      .app()
+      .firestore()
+      .collectionGroup("transactions")
+      .where("businessId", "==", businessId)
+      .where("status", "==", "registered")
+      .get()
+      .then((res) => {
+        res.docs.forEach((doc) => {
+          transactions.push({ ...doc.data(), id: doc.id });
+          // console.log(doc.data());
+        });
+        resolve(transactions);
+      })
+      .catch((e) => {
+        reject(e);
+      });
+  });
+}
 
 const dataParser = {
   parsedData: [],
   tempData: {},
-  currentlySeeking: "referenceNo",
+  currentlySeeking: "refNo",
   seekedItems: {
-    amount: /\d/,
-    referenceNo: /\d/,
-    referenceTime: /\d/,
+    refNo: /CS-\d{5,}-\d{2}/,
+    amount: /\d+\.\d{2}/, //Didn't need to use this
+    refTime: /\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}/,
   },
-  seek: () => {},
+  parse(dataArr) {
+    //Check if data is valid
+    if (!dataArr || dataArr.length === 0) {
+      return;
+    }
+
+    //Loop data and parse content
+    dataArr.forEach((nestedArr) => {
+      // console.log("*** First Dimentional Array ***");
+      // console.log(nestedArr);
+      if (nestedArr && nestedArr.length > 0) {
+        //Real data is stored in a second dimentional array
+        nestedArr.forEach((data) => {
+          // console.log("*** Second Dimentional Array ***");
+          // console.log(data);
+          //Check if data is either a string or a number
+          if (data && (typeof data == "string" || typeof data == "number")) {
+            //Check currentlySeeking state and match corresponding regExp
+            if (this.currentlySeeking == "refNo") {
+              if (typeof data == "string") {
+                const match = data.match(this.seekedItems["refNo"]);
+                if (match && match.length > 0) {
+                  this.tempData["refNo"] = match[0];
+                  this.currentlySeeking = "refTime";
+                }
+              }
+            } else if (this.currentlySeeking == "refTime") {
+              if (typeof data == "string") {
+                const match = data.match(this.seekedItems["refTime"]);
+                if (match && match.length > 0) {
+                  this.tempData["refTime"] = match[0];
+                  this.currentlySeeking = "";
+                }
+              }
+            } else if (this.currentlySeeking == "amount") {
+              if (typeof data == "number") {
+                this.tempData["amount"] = data;
+                this.parsedData.push(this.tempData);
+                this.tempData = {};
+                this.currentlySeeking = "refNo";
+              }
+            } else {
+              if (typeof data == "string") {
+                const match = data.match(/Sub Total/);
+                if (match && match.length > 0) {
+                  this.currentlySeeking = "amount";
+                }
+              }
+            }
+          }
+        });
+      } else {
+        // console.error("*** Empty First Dimentional Array ***");
+      }
+    });
+    // console.log("***ParsedData***");
+    // console.log(this.parsedData);
+    return this.parsedData;
+  },
 };
 
-function load_data(file) {
+function loadData(file) {
   var wb = XLSX.readFile(file);
   /* generate array of arrays */
   data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-  console.log(data);
+  const parsedData = dataParser.parse(data);
+  return parsedData;
 }
 
 const port = process.env.PORT || 4444,
@@ -51,15 +247,68 @@ app.post("/upload", (req, res) => {
   form.parse(req, (_, fields, files) => {
     console.log("\n-----------");
     console.log("Fields", fields);
+    console.log("businessId", fields.businessId);
+    console.log("Fields inside", Object.keys(fields));
     console.log("Received:", Object.keys(files));
     console.log();
     var keys = Object.keys(files),
       k = keys[0];
-    load_data(files[k].path);
-    res.send("Thank you");
+    const parsedData = loadData(files[k].path);
+    const businessId = fields.businessId;
+    getRegisteredTransactions(businessId)
+      .then((transactions) => {
+        //loop transactions
+        transactions.map((transaction) => {
+          //Verify transaction
+          const found = parsedData.find((data) => {
+            // console.log("parsedData", data);
+            return data.refNo == `CS-${transaction.referenceNo}-${currYear}`;
+          });
+          // console.log("found", found);
+          if (found) {
+            transaction.amount = found.amount;
+            transaction.time = found.refTime;
+            transaction.status = "verified";
+            transaction.rewardAmt = found.amount;
+
+            //Check eligibility
+            getSetting(businessId)
+              .then((setting) => {
+                if (
+                  transaction.amount >= setting.amount.min &&
+                  transaction.amount <= setting.amount.max
+                ) {
+                  //Eligible
+                  //Hence Commission
+
+                  //Update Business Bank
+                  commissionTransaction(businessId, transaction, setting)
+                    .then((res) => {
+                      transaction.status = "commissioned";
+                      return transaction;
+                    })
+                    .catch((e) => console.error(e));
+                } else {
+                  //Not Eligible
+                  disqualifyTransaction(businessId, transaction)
+                    .then((res) => {
+                      return transaction;
+                    })
+                    .catch((e) => console.error(e));
+                }
+              })
+              .catch((e) => console.error(e));
+          }
+        });
+        console.log("transactions", transactions);
+        res.send("Thank you");
+      })
+      .catch((e) => {
+        console.error(e);
+      });
   });
 });
-
+process.env.GOOGLE_APPLICATION_CREDENTIALS = "service-account-file.json";
 app.listen(port, () => {
   console.log("\nUpload server running on http://localhost:" + port);
 });
