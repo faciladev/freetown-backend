@@ -6,7 +6,10 @@ const express = require("express"),
   throttle = require("express-throttle-bandwidth"),
   XLSX = require("xlsx");
 var admin = require("firebase-admin");
-admin.initializeApp();
+var serviceAccount = require("./service-account-file.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const currYear = new Date().getFullYear().toString().substring(2, 4);
 
@@ -239,6 +242,9 @@ app.use((req, res, next) => {
   );
   next();
 });
+app.get("/", (req, res) => {
+  res.send("Thanks");
+});
 
 app.post("/upload", (req, res) => {
   const form = new formidable.IncomingForm();
@@ -300,7 +306,6 @@ app.post("/upload", (req, res) => {
               .catch((e) => console.error(e));
           }
         });
-        console.log("transactions", transactions);
         res.send("Thank you");
       })
       .catch((e) => {
@@ -308,7 +313,7 @@ app.post("/upload", (req, res) => {
       });
   });
 });
-process.env.GOOGLE_APPLICATION_CREDENTIALS = "service-account-file.json";
+
 app.listen(port, () => {
   console.log("\nUpload server running on http://localhost:" + port);
 });
