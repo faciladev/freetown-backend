@@ -153,7 +153,7 @@ const dataParser = {
   seekedItems: {
     refNo: /CS-\d{5,}-\d{2}/,
     amount: /\d+\.\d{2}/, //Didn't need to use this
-    refTime: /\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}/,
+    refTime: /\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}(\:\d{2})*/,
   },
   parse(dataArr) {
     //Check if data is valid
@@ -190,8 +190,8 @@ const dataParser = {
                 }
               }
             } else if (this.currentlySeeking == "amount") {
-              if (typeof data == "number") {
-                this.tempData["amount"] = data;
+              if (typeof parseFloat(data) == "number") {
+                this.tempData["amount"] = parseFloat(data);
                 this.parsedData.push(this.tempData);
                 this.tempData = {};
                 this.currentlySeeking = "refNo";
@@ -210,8 +210,8 @@ const dataParser = {
         // console.error("*** Empty First Dimentional Array ***");
       }
     });
-    // console.log("***ParsedData***");
-    // console.log(this.parsedData);
+    console.log("***ParsedData***");
+    console.log(this.parsedData);
     return this.parsedData;
   },
 };
@@ -219,7 +219,11 @@ const dataParser = {
 function loadData(file) {
   var wb = XLSX.readFile(file);
   /* generate array of arrays */
-  data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+  data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
+    header: 1,
+    raw: false,
+  });
+  console.log(data);
   const parsedData = dataParser.parse(data);
   return parsedData;
 }
