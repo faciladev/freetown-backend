@@ -50,7 +50,7 @@ function disqualifyTransaction(businessId, trans) {
 }
 
 function calculateReward(transTime, transAmt, setting) {
-  const timePart = parseInt(transTime.match(/(\d{2})(?=\:)/)[0]);
+  const timePart = parseInt(transTime.match(/(\d{1,2})(?=\:)/)[0]);
   let rewardAmt;
   //If transTime is morning
   if (timePart <= 12) {
@@ -91,22 +91,15 @@ async function commissionTransaction(businessId, trans, setting) {
           .doc(`businesses/${businessId}/transactions/${trans.id}`);
         const businessesDoc = await transaction.get(businessRef);
         const transDoc = await transaction.get(transRef);
-        console.log("businessesDoc.data()", businessesDoc.data());
-        console.log("transDoc.data()", transDoc.data());
         if (businessesDoc.exists) {
           const business = businessesDoc.data();
           //7% of amount is collected to bank
           const commissionAmt = parseInt(parseInt(trans.amount) * 0.07);
           if (business.bank) {
-            console.log("here");
-            console.log("bank", business.bank);
-            console.log("commissionAmt", commissionAmt);
             transaction.update(businessRef, {
               bank: business.bank + commissionAmt,
             });
           } else {
-            console.log("here");
-            console.log("commissionAmt", commissionAmt);
             transaction.update(businessRef, { bank: commissionAmt });
           }
         }
@@ -136,7 +129,6 @@ function getRegisteredTransactions(businessId) {
       .then((res) => {
         res.docs.forEach((doc) => {
           transactions.push({ ...doc.data(), id: doc.id });
-          // console.log(doc.data());
         });
         resolve(transactions);
       })
@@ -163,13 +155,9 @@ const dataParser = {
 
     //Loop data and parse content
     dataArr.forEach((nestedArr) => {
-      // console.log("*** First Dimentional Array ***");
-      // console.log(nestedArr);
       if (nestedArr && nestedArr.length > 0) {
         //Real data is stored in a second dimentional array
         nestedArr.forEach((data) => {
-          // console.log("*** Second Dimentional Array ***");
-          // console.log(data);
           //Check if data is either a string or a number
           if (data && (typeof data == "string" || typeof data == "number")) {
             //Check currentlySeeking state and match corresponding regExp
@@ -210,8 +198,6 @@ const dataParser = {
         // console.error("*** Empty First Dimentional Array ***");
       }
     });
-    console.log("***ParsedData***");
-    console.log(this.parsedData);
     return this.parsedData;
   },
 };
@@ -223,7 +209,6 @@ function loadData(file) {
     header: 1,
     raw: false,
   });
-  console.log(data);
   const parsedData = dataParser.parse(data);
   return parsedData;
 }
@@ -255,12 +240,12 @@ app.post("/upload", (req, res) => {
 
   form.uploadDir = folder;
   form.parse(req, (_, fields, files) => {
-    console.log("\n-----------");
-    console.log("Fields", fields);
-    console.log("businessId", fields.businessId);
-    console.log("Fields inside", Object.keys(fields));
-    console.log("Received:", Object.keys(files));
-    console.log();
+    // console.log("\n-----------");
+    // console.log("Fields", fields);
+    // console.log("businessId", fields.businessId);
+    // console.log("Fields inside", Object.keys(fields));
+    // console.log("Received:", Object.keys(files));
+    // console.log();
     var keys = Object.keys(files),
       k = keys[0];
     const parsedData = loadData(files[k].path);
@@ -271,10 +256,8 @@ app.post("/upload", (req, res) => {
         transactions.map((transaction) => {
           //Verify transaction
           const found = parsedData.find((data) => {
-            // console.log("parsedData", data);
             return data.refNo == `CS-${transaction.referenceNo}-${currYear}`;
           });
-          // console.log("found", found);
           if (found) {
             transaction.amount = found.amount;
             transaction.time = found.refTime;
