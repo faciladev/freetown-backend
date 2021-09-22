@@ -89,18 +89,31 @@ async function commissionTransaction(businessId, trans, setting) {
           .app()
           .firestore()
           .doc(`businesses/${businessId}/transactions/${trans.id}`);
+
+        const logRef = admin
+          .app()
+          .firestore()
+          .collection(`businesses/${businessId}/logs`)
+          .doc();
         const businessesDoc = await transaction.get(businessRef);
         const transDoc = await transaction.get(transRef);
         if (businessesDoc.exists) {
           const business = businessesDoc.data();
           //7% of amount is collected to bank
           const commissionAmt = parseInt(parseInt(trans.amount) * 0.07);
-          if (business.bank) {
+          //3% of amount is owed to advertiser
+          const advertiserCommission = parseInt(parseInt(trans.amount) * 0.03);
+          if (business.bank && business.advertiserCommission) {
             transaction.update(businessRef, {
               bank: business.bank + commissionAmt,
+              advertiserCommission:
+                business.advertiserCommission + advertiserCommission,
             });
           } else {
-            transaction.update(businessRef, { bank: commissionAmt });
+            transaction.update(businessRef, {
+              bank: commissionAmt,
+              advertiserCommission,
+            });
           }
         }
         if (transDoc.exists) {
@@ -109,6 +122,22 @@ async function commissionTransaction(businessId, trans, setting) {
           transaction.update(transRef, {
             ...trans,
             status: "commissioned",
+          });
+          //Add Log
+          const logTime = new Date(
+            new Date().toLocaleString("en-us", {
+              timeZone: "Africa/Addis_Ababa",
+            })
+          );
+          const logDate = new Date(logTime);
+          logDate.setHours(0, 0, 0, 0);
+          const transWithNoId = Object.assign({}, trans);
+          delete transWithNoId.id;
+          transaction.set(logRef, {
+            ...transWithNoId,
+            status: "commissioned",
+            logTime: admin.firestore.Timestamp.fromDate(logTime),
+            logDate: admin.firestore.Timestamp.fromDate(logDate),
           });
         }
         resolve();
@@ -178,8 +207,11 @@ const dataParser = {
                 }
               }
             } else if (this.currentlySeeking == "amount") {
-              if (typeof parseFloat(data) == "number") {
-                this.tempData["amount"] = parseFloat(data);
+              if (
+                typeof data == "string" &&
+                typeof parseFloat(data.replace(/\,/g, "")) == "number"
+              ) {
+                this.tempData["amount"] = parseFloat(data.replace(/\,/g, ""));
                 this.parsedData.push(this.tempData);
                 this.tempData = {};
                 this.currentlySeeking = "refNo";
