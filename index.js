@@ -53,23 +53,34 @@ function calculateReward(transTime, transAmt, setting) {
   const timePart = parseInt(transTime.match(/(\d{1,2})(?=\:)/)[0]);
   let rewardAmt;
   //If transTime is morning
-  if (timePart <= 12) {
+  if (
+    timePart >= setting.time.morningStart &&
+    timePart <= setting.time.morningEnd
+  ) {
     //Apply setting morning %
     rewardAmt = parseInt(
       parseInt(transAmt) * parseFloat(setting.percent.morning / 100)
     );
-  } else if (timePart <= 18) {
+  } else if (
+    timePart >= setting.time.afternoonStart &&
+    timePart <= setting.time.afternoonEnd
+  ) {
     //If transTime is afternoon
     //Apply setting afternoon %
     rewardAmt = parseInt(
       parseInt(transAmt) * parseFloat(setting.percent.afternoon / 100)
     );
-  } else {
+  } else if (
+    timePart >= setting.time.nightStart &&
+    timePart <= setting.time.nightEnd
+  ) {
     //If transTime is night
     //Apply setting night %
     rewardAmt = parseInt(
       parseInt(transAmt) * parseFloat(setting.percent.night / 100)
     );
+  } else {
+    rewardAmt = 0;
   }
 
   return rewardAmt;
