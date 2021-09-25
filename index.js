@@ -102,17 +102,17 @@ async function commissionTransaction(businessId, trans, setting) {
           //7% of amount is collected to bank
           const commissionAmt = parseInt(parseInt(trans.amount) * 0.07);
           //3% of amount is owed to advertiser
-          const advertiserCommission = parseInt(parseInt(trans.amount) * 0.03);
-          if (business.bank && business.advertiserCommission) {
+          // const advertiserCommission = parseInt(parseInt(trans.amount) * 0.03);
+          if (business.bank) {
             transaction.update(businessRef, {
               bank: business.bank + commissionAmt,
-              advertiserCommission:
-                business.advertiserCommission + advertiserCommission,
+              // advertiserCommission:
+              //   business.advertiserCommission + advertiserCommission,
             });
           } else {
             transaction.update(businessRef, {
               bank: commissionAmt,
-              advertiserCommission,
+              // advertiserCommission,
             });
           }
         }
@@ -124,11 +124,7 @@ async function commissionTransaction(businessId, trans, setting) {
             status: "commissioned",
           });
           //Add Log
-          const logTime = new Date(
-            new Date().toLocaleString("en-us", {
-              timeZone: "Africa/Addis_Ababa",
-            })
-          );
+          const logTime = new Date();
           const logDate = new Date(logTime);
           logDate.setHours(0, 0, 0, 0);
           const transWithNoId = Object.assign({}, trans);
@@ -241,6 +237,19 @@ function loadData(file) {
     header: 1,
     raw: false,
   });
+  // //Add Log
+  // const logTime = new Date();
+  // const logDate = new Date(logTime);
+  // logDate.setHours(0, 0, 0, 0);
+  // console.log(logTime, admin.firestore.Timestamp.fromDate(logTime));
+  // console.log(logDate, admin.firestore.Timestamp.fromDate(logDate));
+  // console.log(
+  //   new Date().setHours(0, 0, 0, 0),
+  //   admin.firestore.Timestamp.fromDate(logDate)
+  // );
+  // console.log(logTime.getHours(), logDate.getHours());
+  // console.log(logTime.getDate(), logDate.getDate());
+  // return;
   const parsedData = dataParser.parse(data);
   return parsedData;
 }
