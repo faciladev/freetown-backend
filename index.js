@@ -50,6 +50,9 @@ function disqualifyTransaction(businessId, trans) {
 }
 
 function calculateReward(transTime, transAmt, setting) {
+  if (parseInt(transAmt) > parseInt(setting.amount.max)) {
+    transAmt = parseInt(setting.amount.max);
+  }
   const timePart = parseInt(transTime.match(/(\d{1,2})(?=\:)/)[0]);
   let rewardAmt;
   //If transTime is morning
@@ -319,10 +322,7 @@ app.post("/upload", (req, res) => {
             //Check eligibility
             getSetting(businessId)
               .then((setting) => {
-                if (
-                  transaction.amount >= setting.amount.min &&
-                  transaction.amount <= setting.amount.max
-                ) {
+                if (transaction.amount >= setting.amount.min) {
                   //Eligible
                   //Hence Commission
 
