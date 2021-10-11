@@ -53,7 +53,8 @@ function calculateReward(transTime, transAmt, setting) {
   if (parseInt(transAmt) > parseInt(setting.amount.max)) {
     transAmt = parseInt(setting.amount.max);
   }
-  const timePart = parseInt(transTime.match(/(\d{1,2})(?=\:)/)[0]);
+  // const timePart = parseInt(transTime.match(/(\d{1,2})(?=\:)/)[0]);
+  const timePart = transTime.toDate().getHours();
   let rewardAmt;
   //If transTime is morning
   if (
@@ -315,7 +316,9 @@ app.post("/upload", (req, res) => {
           });
           if (found) {
             transaction.amount = found.amount;
-            transaction.time = found.refTime;
+            transaction.time = admin.firestore.Timestamp.fromDate(
+              new Date(found.refTime)
+            );
             transaction.status = "verified";
             transaction.rewardAmt = found.amount;
 
